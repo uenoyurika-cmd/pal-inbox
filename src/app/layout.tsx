@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { NextAuthProvider } from "@/components/providers/NextAuthProvider";
 
 export const metadata: Metadata = {
   title: "Pal Inbox - Gmail & Slack を一括管理",
@@ -17,7 +18,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" className="h-full antialiased">
-      <body className="min-h-full" style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>{children}</body>
+      <body className="min-h-full" style={{ fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif" }}>
+        <NextAuthProvider>{children}</NextAuthProvider>
+      </body>
     </html>
   );
 }

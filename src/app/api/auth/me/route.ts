@@ -14,5 +14,6 @@ export async function GET() {
     userEmail: session.userEmail,
     userImage: session.userImage,
     isConfigured: session.settings?.isConfigured || false,
+    isGoogleConnected: !!session.googleAccessToken,
   });
 }

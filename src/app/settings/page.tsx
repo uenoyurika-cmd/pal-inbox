@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { PalIcon } from "@/components/pal/PalIcon";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 
 interface Settings {
   openaiApiKey: string;
@@ -30,6 +31,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -52,6 +54,11 @@ export default function SettingsPage() {
         slackUserId: data.slackUserId || "U06NTAMKRF1",
         userEmail: data.userEmail || "",
       });
+
+      // Check Google connection status
+      const meRes = await fetch("/api/auth/me");
+      const meData = await meRes.json();
+      setIsGoogleConnected(!!meData.isGoogleConnected);
     } catch (error) {
       console.error("Error loading settings:", error);
       showToast("設定の読み込みに失敗しました", "error");
@@ -97,6 +104,10 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleGoogleReconnect = () => {
+    signIn("google", { callbackUrl: "/api/auth/sync?redirect=/settings" });
   };
 
   const showToast = (message: string, type: "success" | "error") => {
@@ -165,6 +176,48 @@ export default function SettingsPage() {
           transition={{ delay: 0.7 }}
           className="space-y-4 mb-8"
         >
+          {/* Google Connection Status */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Gmail 接続
+            </label>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/30 backdrop-blur-md border border-white/50">
+              {isGoogleConnected ? (
+                <>
+                  <CheckCircle size={18} className="text-green-500 flex-shrink-0" />
+                  <span className="text-sm text-green-700 flex-1">
+                    Google アカウント接続済み
+                  </span>
+                  <button
+                    onClick={handleGoogleReconnect}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    title="再接続"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <XCircle size={18} className="text-orange-400 flex-shrink-0" />
+                  <span className="text-sm text-gray-600 flex-1">
+                    未接続
+                  </span>
+                  <button
+                    onClick={handleGoogleReconnect}
+                    className="text-xs px-3 py-1 rounded-lg bg-accent-purple text-white hover:bg-purple-600 transition-colors"
+                  >
+                    接続する
+                  </button>
+                </>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              {isGoogleConnected
+                ? "Gmail API にアクセスできます"
+                : "Google ログインで Gmail を読み取れるようになります"}
+            </p>
+          </div>
+
           {/* OpenAI API Key */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -224,7 +277,7 @@ export default function SettingsPage() {
               className="w-full px-4 py-3 rounded-xl bg-white/20 backdrop-blur-md border border-white/50 text-gray-600 cursor-not-allowed opacity-60 transition-all"
             />
             <p className="text-xs text-gray-400 mt-1">
-              セッション情報から自動入力
+              Google ログイン情報から自動入力
             </p>
           </div>
         </motion.div>
