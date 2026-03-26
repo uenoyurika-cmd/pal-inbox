@@ -1,22 +1,29 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { UnifiedMessage } from "@/lib/types";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.accessToken) {
+    const session = await getSession();
+    if (!session.isLoggedIn) {
       return NextResponse.json([], { status: 200 });
     }
 
-    // List messages to uenoyurika@basicinc.jp and is:unread
+    const googleToken = session.googleAccessToken;
+    const userEmail =
+      session.settings?.userEmail || session.userEmail || "uenoyurika@basicinc.jp";
+
+    if (!googleToken) {
+      // No Google token - return empty (user needs to configure Google OAuth)
+      return NextResponse.json([], { status: 200 });
+    }
+
+    // List messages to the user's email and is:unread
     const listRes = await fetch(
-      `https://www.googleapis.com/gmail/v1/users/me/messages?q=to:uenoyurika@basicinc.jp%20is:unread&maxResults=20`,
+      `https://www.googleapis.com/gmail/v1/users/me/messages?q=to:${encodeURIComponent(userEmail)}%20is:unread&maxResults=20`,
       {
         headers: {
-          Authorization: `Bearer ${session.accessToken}`,
+          Authorization: `Bearer ${googleToken}`,
         },
       }
     );
@@ -27,13 +34,13 @@ export async function GET(request: Request) {
     }
 
     const listData = await listRes.json();
-    const messageIds = listData.messages?.map((m: any) => m.id) || [];
+    const messageIds =
+      listData.messages?.map((m: { id: string }) => m.id) || [];
 
     if (messageIds.length === 0) {
       return NextResponse.json([]);
     }
 
-    // Fetch message details in batches
     const messages: UnifiedMessage[] = [];
     const batchSize = 20;
 
@@ -41,11 +48,14 @@ export async function GET(request: Request) {
       const batch = messageIds.slice(i, i + batchSize);
 
       const detailPromises = batch.map((id: string) =>
-        fetch(`https://www.googleapis.com/gmail/v1/users/me/messages/${id}`, {
-          headers: {
-            Authorization: `Bearer ${session.accessToken}`,
-          },
-        })
+        fetch(
+          `https://www.googleapis.com/gmail/v1/users/me/messages/${id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${googleToken}`,
+            },
+          }
+        )
       );
 
       const detailResponses = await Promise.all(detailPromises);
@@ -54,18 +64,23 @@ export async function GET(request: Request) {
         if (!res.ok) continue;
 
         const message = await res.json();
-        const headers = message.payload?.headers || [];
+        const headers: { name: string; value: string }[] =
+          message.payload?.headers || [];
 
         const getHeader = (name: string) =>
-          headers.find((h: any) => h.name === name)?.value || "";
+          headers.find((h) => h.name === name)?.value || "";
 
-        const fromEmail = getHeader("From").match(/<(.+?)>/)?.[1] || getHeader("From");
+        const fromEmail =
+          getHeader("From").match(/<(.+?)>/)?.[1] || getHeader("From");
         const from = getHeader("From").split("<")[0].trim();
 
-        const body = message.payload?.parts?.find((p: any) => p.mimeType === "text/plain")?.body
-          ?.data
+        const body = message.payload?.parts?.find(
+          (p: { mimeType: string }) => p.mimeType === "text/plain"
+        )?.body?.data
           ? Buffer.from(
-              message.payload.parts.find((p: any) => p.mimeType === "text/plain").body.data,
+              message.payload.parts.find(
+                (p: { mimeType: string }) => p.mimeType === "text/plain"
+              ).body.data,
               "base64"
             ).toString()
           : message.payload?.body?.data
@@ -82,7 +97,9 @@ export async function GET(request: Request) {
           subject: getHeader("Subject"),
           body,
           snippet,
-          receivedAt: new Date(parseInt(message.internalDate)).toISOString(),
+          receivedAt: new Date(
+            parseInt(message.internalDate)
+          ).toISOString(),
           threadId: message.threadId,
           isRead: !message.labelIds?.includes("UNREAD"),
           isArchived: false,

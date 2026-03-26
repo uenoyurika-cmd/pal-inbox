@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 import { UnifiedMessage } from "@/lib/types";
 
-const BOT_USER_ID = "U06NTAMKRF1";
-
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const botToken = process.env.SLACK_BOT_TOKEN;
+    const session = await getSession();
+    if (!session.isLoggedIn) {
+      return NextResponse.json([], { status: 200 });
+    }
+
+    const botToken = session.settings?.slackBotToken || process.env.SLACK_BOT_TOKEN;
+    const slackUserId = session.settings?.slackUserId || "U06NTAMKRF1";
 
     if (!botToken) {
-      console.error("SLACK_BOT_TOKEN not set");
       return NextResponse.json([], { status: 200 });
     }
 
@@ -36,7 +40,6 @@ export async function GET(request: Request) {
 
     const messages: UnifiedMessage[] = [];
 
-    // Fetch messages from each channel
     for (const channel of conversationsData.channels) {
       try {
         const historyRes = await fetch(
@@ -54,9 +57,9 @@ export async function GET(request: Request) {
 
         if (!historyData.ok || !historyData.messages) continue;
 
-        // Filter messages mentioning the bot user
+        // Filter messages mentioning the user
         for (const msg of historyData.messages) {
-          if (msg.text && msg.text.includes(`<@${BOT_USER_ID}>`)) {
+          if (msg.text && msg.text.includes(`<@${slackUserId}>`)) {
             const userRes = await fetch(
               `https://slack.com/api/users.info?user=${msg.user}`,
               {
@@ -81,7 +84,9 @@ export async function GET(request: Request) {
               subject: `Message from #${channel.name}`,
               body: msg.text || "",
               snippet: (msg.text || "").substring(0, 100),
-              receivedAt: new Date(parseInt(msg.ts.split(".")[0]) * 1000).toISOString(),
+              receivedAt: new Date(
+                parseInt(msg.ts.split(".")[0]) * 1000
+              ).toISOString(),
               channelName: channel.name,
               isRead: false,
               isArchived: false,
@@ -89,7 +94,10 @@ export async function GET(request: Request) {
           }
         }
       } catch (error) {
-        console.error(`Error fetching messages from channel ${channel.id}:`, error);
+        console.error(
+          `Error fetching messages from channel ${channel.id}:`,
+          error
+        );
         continue;
       }
     }

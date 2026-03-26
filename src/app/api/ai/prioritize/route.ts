@@ -1,16 +1,30 @@
 import { NextResponse } from "next/server";
 import { getOpenAIClient } from "@/lib/openai";
+import { getSession } from "@/lib/session";
 import { PrioritizeResponse } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session.isLoggedIn) {
+      return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+    }
+
+    const apiKey = session.settings?.openaiApiKey || process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "OpenAI APIキーが設定されていません" },
+        { status: 400 }
+      );
+    }
+
     const { messages } = await request.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "messages array required" }, { status: 400 });
     }
 
-    const client = getOpenAIClient();
+    const client = getOpenAIClient(apiKey);
 
     const messageText = messages
       .map(

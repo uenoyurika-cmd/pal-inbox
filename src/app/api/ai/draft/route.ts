@@ -1,16 +1,30 @@
 import { NextResponse } from "next/server";
 import { getOpenAIClient } from "@/lib/openai";
+import { getSession } from "@/lib/session";
 import { DraftResponse } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session.isLoggedIn) {
+      return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+    }
+
+    const apiKey = session.settings?.openaiApiKey || process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "OpenAI APIキーが設定されていません。設定ページから入力してください。" },
+        { status: 400 }
+      );
+    }
+
     const { subject, body, from, source, tone = "business" } = await request.json();
 
     if (!subject || !body) {
       return NextResponse.json({ error: "subject and body required" }, { status: 400 });
     }
 
-    const client = getOpenAIClient();
+    const client = getOpenAIClient(apiKey);
 
     const systemPrompt = `You are a helpful assistant that drafts email/message replies in Japanese. Write polite, professional responses. The tone should be: ${tone}.`;
 
